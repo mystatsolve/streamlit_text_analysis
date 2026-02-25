@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>텍스트 빈도 분석 도구</title>
+  <link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic:wght@400;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/wordcloud2.js/1.2.2/wordcloud2.min.js"></script>
+  <style>
+    :root {
+      --primary: #3b82f6;
+      --primary-dark: #2563eb;
+      --primary-light: #eff6ff;
+      --bg: #f1f5f9;
+      --card: #ffffff;
+      --border: #e2e8f0;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --success: #22c55e;
+      --danger: #ef4444;
+      --tag-bg: #dbeafe;
+      --tag-color: #1d4ed8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Nanum Gothic', -apple-system, 'Malgun Gothic', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    header {
+      background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+      color: #fff;
+      padding: 28px 24px 22px;
+      text-align: center;
+    }
+    header h1 { font-size: 1.75rem; font-weight: 800; margin-bottom: 6px; }
+    header p  { opacity: .85; font-size: .9rem; }
+
+    .container { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
+
+    /* ── Card ── */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+    .card-title {
+      font-size: 1.05rem; font-weight: 700;
+      margin-bottom: 18px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .step-badge {
+      background: var(--primary); color: #fff;
+      width: 26px; height: 26px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: .78rem; font-weight: 800; flex-shrink: 0;
+    }
+    .hidden { display: none !important; }
+
+    /* ── Upload ── */
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: 10px; padding: 44px 20px;
+      text-align: center; cursor: pointer;
+      transition: .2s; position: relative;
+    }
+    .upload-zone:hover, .upload-zone.over { border-color: var(--primary); background: var(--primary-light); }
+    .upload-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+    .upload-icon { font-size: 2.8rem; margin-bottom: 10px; }
+    .upload-text { font-size: .95rem; color: var(--text-muted); }
+    .upload-hint { font-size: .78rem; color: var(--text-muted); margin-top: 6px; }
+
+    .file-badge {
+      display: none; margin-top: 14px;
+      padding: 10px 16px; background: #f0fdf4;
+      border: 1px solid #86efac; border-radius: 8px;
+      align-items: center; gap: 8px; font-size: .875rem;
+    }
+    .file-badge.show { display: flex; }
+    .file-badge .rows { margin-left: auto; color: var(--text-muted); font-size: .8rem; }
+
+    /* ── Column map ── */
+    .col-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 16px; }
+    @media(max-width:600px){ .col-grid { grid-template-columns: 1fr; } }
+
+    /* ── Form controls ── */
+    label.lbl { display: block; font-size: .82rem; font-weight: 700; margin-bottom: 5px; }
+    .fc {
+      width: 100%; padding: 8px 11px;
+      border: 1px solid var(--border); border-radius: 8px;
+      font-size: .875rem; background: #fff; outline: none;
+      transition: border-color .15s;
+    }
+    .fc:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(59,130,246,.1); }
+
+    /* ── Settings grid ── */
+    .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media(max-width:700px){ .settings-grid { grid-template-columns: 1fr; } }
+    .form-row { margin-bottom: 16px; }
+    .inline-num { width: 110px !important; display: inline-block !important; }
+
+    /* ── Year buttons ── */
+    .year-wrap { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 8px; }
+    .yr-btn {
+      padding: 4px 12px; border: 1px solid var(--border);
+      border-radius: 20px; font-size: .78rem; cursor: pointer;
+      background: #fff; transition: .15s;
+      font-family: inherit;
+    }
+    .yr-btn:hover { border-color: var(--primary); color: var(--primary); }
+    .yr-btn.on { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+    /* ── Stopwords ── */
+    .sw-row { display: flex; gap: 8px; }
+    .sw-row input { flex: 1; }
+    .sw-actions { display: flex; gap: 8px; margin-top: 8px; }
+    .sw-list {
+      display: flex; flex-wrap: wrap; gap: 5px;
+      max-height: 140px; overflow-y: auto;
+      margin-top: 10px; padding: 8px;
+      border: 1px solid var(--border); border-radius: 8px;
+      background: #f8fafc;
+    }
+    .sw-tag {
+      background: var(--tag-bg); color: var(--tag-color);
+      padding: 2px 9px; border-radius: 20px; font-size: .78rem;
+      display: flex; align-items: center; gap: 3px;
+    }
+    .sw-tag button {
+      border: none; background: none; cursor: pointer;
+      color: var(--tag-color); font-size: .9rem; line-height: 1; padding: 0;
+    }
+    .sw-tag button:hover { color: var(--danger); }
+    .sw-count { font-size: .72rem; color: var(--text-muted); margin-top: 5px; }
+
+    /* ── Buttons ── */
+    .btn {
+      padding: 8px 18px; border-radius: 8px; border: none;
+      font-size: .875rem; font-weight: 700; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 5px;
+      transition: .15s; font-family: inherit;
+    }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: var(--primary-dark); }
+    .btn-primary:disabled { opacity: .45; cursor: not-allowed; }
+    .btn-outline { background: #fff; color: var(--text); border: 1px solid var(--border); }
+    .btn-outline:hover { background: var(--bg); }
+    .btn-green { background: var(--success); color: #fff; }
+    .btn-green:hover { background: #16a34a; }
+    .btn-sm { padding: 5px 11px; font-size: .78rem; }
+
+    /* ── Center row ── */
+    .center { display: flex; justify-content: center; align-items: center; gap: 14px; margin-top: 12px; }
+    .spinner {
+      width: 18px; height: 18px;
+      border: 2px solid var(--border); border-top-color: var(--primary);
+      border-radius: 50%; animation: spin .7s linear infinite; display: none;
+    }
+    .spinner.show { display: block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Stats ── */
+    .stats { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 20px; }
+    @media(max-width:600px){ .stats { grid-template-columns: repeat(2,1fr); } }
+    .stat-box { background: #f8fafc; border: 1px solid var(--border); border-radius: 10px; padding: 14px; text-align: center; }
+    .stat-val { font-size: 1.7rem; font-weight: 800; color: var(--primary); }
+    .stat-lbl { font-size: .75rem; color: var(--text-muted); margin-top: 3px; }
+
+    /* ── Tabs ── */
+    .tabs { display: flex; border-bottom: 2px solid var(--border); margin-bottom: 18px; gap: 4px; }
+    .tab-btn {
+      padding: 9px 18px; border: none; background: none;
+      font-size: .9rem; cursor: pointer; color: var(--text-muted);
+      border-bottom: 2px solid transparent; margin-bottom: -2px;
+      transition: .15s; font-family: inherit; font-weight: 700;
+    }
+    .tab-btn.on { color: var(--primary); border-bottom-color: var(--primary); }
+    .tab-pane { display: none; }
+    .tab-pane.on { display: block; }
+
+    /* ── Table ── */
+    .table-bar {
+      display: flex; justify-content: space-between;
+      align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;
+    }
+    .table-bar small { color: var(--text-muted); font-size: .82rem; }
+    .table-bar .right { display: flex; gap: 8px; align-items: center; }
+    .search-fc { width: 175px !important; }
+    .tbl-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
+    table { width: 100%; border-collapse: collapse; font-size: .86rem; }
+    th {
+      background: #f1f5f9; padding: 9px 14px;
+      text-align: left; font-weight: 700; border-bottom: 1px solid var(--border);
+      white-space: nowrap; cursor: pointer; user-select: none;
+    }
+    th:hover { background: #e2e8f0; }
+    td { padding: 8px 14px; border-bottom: 1px solid var(--border); }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #f8fafc; }
+    .rank { color: var(--text-muted); font-size: .78rem; }
+    .bar-wrap { width: 100%; background: #e2e8f0; border-radius: 4px; height: 5px; overflow: hidden; margin-top: 4px; }
+    .bar-fill { height: 100%; background: var(--primary); border-radius: 4px; }
+
+    /* ── Pagination ── */
+    .pager { display: flex; justify-content: center; gap: 5px; margin-top: 14px; flex-wrap: wrap; }
+    .pg-btn {
+      min-width: 32px; height: 32px; border: 1px solid var(--border);
+      border-radius: 7px; background: #fff; cursor: pointer;
+      font-size: .82rem; display: flex; align-items: center; justify-content: center;
+      transition: .15s; font-family: inherit; padding: 0 6px;
+    }
+    .pg-btn:hover { border-color: var(--primary); color: var(--primary); }
+    .pg-btn.on { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .pg-btn:disabled { opacity: .35; cursor: not-allowed; }
+
+    /* ── Word Cloud ── */
+    .wc-controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 14px; }
+    .wc-controls .form-row { margin: 0; }
+    .wc-canvas-wrap {
+      width: 100%; border: 1px solid var(--border);
+      border-radius: 10px; overflow: hidden; background: #fff;
+    }
+    #wc-canvas { width: 100%; display: block; }
+
+    footer {
+      text-align: center; padding: 22px;
+      color: var(--text-muted); font-size: .78rem;
+      border-top: 1px solid var(--border); margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>📊 텍스트 빈도 분석 도구</h1>
+  <p>CSV 업로드 → 불용어 설정 → 빈도 분석 · 워드 클라우드 · CSV 다운로드</p>
+</header>
+
+<div class="container">
+
+  <!-- ① CSV 업로드 -->
+  <div class="card">
+    <div class="card-title"><span class="step-badge">1</span> CSV 파일 업로드</div>
+    <div class="upload-zone" id="dropZone">
+      <input type="file" id="fileInput" accept=".csv" />
+      <div class="upload-icon">📂</div>
+      <div class="upload-text">CSV 파일을 드래그하거나 클릭하여 선택하세요</div>
+      <div class="upload-hint">sentence(또는 abstract) · year 컬럼이 포함된 CSV 파일</div>
+    </div>
+    <div class="file-badge" id="fileBadge">
+      <span>✅</span>
+      <span id="fileName"></span>
+      <span class="rows" id="fileRows"></span>
+    </div>
+    <!-- 컬럼 선택 -->
+    <div id="colMap" class="hidden">
+      <div class="col-grid" style="margin-top:16px;">
+        <div>
+          <label class="lbl">텍스트 컬럼</label>
+          <select class="fc" id="textCol"></select>
+        </div>
+        <div>
+          <label class="lbl">연도 컬럼</label>
+          <select class="fc" id="yearCol"></select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ② 분석 설정 -->
+  <div class="card hidden" id="settingsCard">
+    <div class="card-title"><span class="step-badge">2</span> 분석 설정</div>
+    <div class="settings-grid">
+
+      <!-- 왼쪽: 필터 옵션 -->
+      <div>
+        <div class="form-row">
+          <label class="lbl">연도 필터</label>
+          <div class="year-wrap" id="yearWrap"></div>
+        </div>
+        <div class="form-row">
+          <label class="lbl">최소 빈도수</label>
+          <input type="number" class="fc inline-num" id="minFreq" value="2" min="1" />
+        </div>
+        <div class="form-row">
+          <label class="lbl">최소 단어 길이 (글자)</label>
+          <input type="number" class="fc inline-num" id="minLen" value="2" min="1" max="10" />
+        </div>
+        <div class="form-row">
+          <label class="lbl">상위 단어 수</label>
+          <input type="number" class="fc inline-num" id="topN" value="150" min="10" max="1000" />
+        </div>
+      </div>
+
+      <!-- 오른쪽: 불용어 -->
+      <div>
+        <label class="lbl">불용어 관리</label>
+        <div class="sw-row">
+          <input type="text" class="fc" id="swInput" placeholder="불용어 입력 (쉼표로 구분 가능)" />
+          <button class="btn btn-outline btn-sm" onclick="addStopwords()">추가</button>
+        </div>
+        <div class="sw-actions">
+          <button class="btn btn-outline btn-sm" onclick="resetStopwords()">기본값 초기화</button>
+          <button class="btn btn-outline btn-sm" onclick="clearStopwords()">전체 삭제</button>
+        </div>
+        <div class="sw-list" id="swList"></div>
+        <div class="sw-count"><span id="swCount">0</span>개의 불용어 등록됨</div>
+      </div>
+    </div>
+
+    <div class="center">
+      <button class="btn btn-primary" id="analyzeBtn" onclick="runAnalysis()">🔍 분석 시작</button>
+      <div class="spinner" id="spinner"></div>
+    </div>
+  </div>
+
+  <!-- ③ 분석 결과 -->
+  <div class="card hidden" id="resultsCard">
+    <div class="card-title"><span class="step-badge">3</span> 분석 결과</div>
+
+    <div class="stats">
+      <div class="stat-box"><div class="stat-val" id="sDocs">-</div><div class="stat-lbl">분석 문서 수</div></div>
+      <div class="stat-box"><div class="stat-val" id="sTotal">-</div><div class="stat-lbl">전체 단어 수</div></div>
+      <div class="stat-box"><div class="stat-val" id="sUniq">-</div><div class="stat-lbl">고유 단어 수</div></div>
+      <div class="stat-box"><div class="stat-val" id="sYears">-</div><div class="stat-lbl">분석 연도 수</div></div>
+    </div>
+
+    <!-- 탭 -->
+    <div class="tabs">
+      <button class="tab-btn on" onclick="switchTab('freq',this)">📋 빈도 분석표</button>
+      <button class="tab-btn" onclick="switchTab('wc',this)">☁️ 워드 클라우드</button>
+    </div>
+
+    <!-- 빈도 분석표 -->
+    <div class="tab-pane on" id="tab-freq">
+      <div class="table-bar">
+        <small>총 <strong id="wordCount">0</strong>개 단어</small>
+        <div class="right">
+          <input type="text" class="fc search-fc" id="tableSearch" placeholder="단어 검색…" oninput="filterTable()" />
+          <button class="btn btn-green btn-sm" onclick="dlCSV()">⬇ CSV 다운로드</button>
+        </div>
+      </div>
+      <div class="tbl-wrap">
+        <table id="freqTable">
+          <thead>
+            <tr>
+              <th style="width:56px" onclick="sortBy('rank')">순위<span id="srt-rank"> ⇅</span></th>
+              <th onclick="sortBy('word')">단어<span id="srt-word"> ⇅</span></th>
+              <th onclick="sortBy('freq')">빈도<span id="srt-freq"> ↓</span></th>
+              <th onclick="sortBy('pct')">비율(%)<span id="srt-pct"> ⇅</span></th>
+              <th style="width:130px">시각화</th>
+            </tr>
+          </thead>
+          <tbody id="freqTbody"></tbody>
+        </table>
+      </div>
+      <div class="pager" id="pager"></div>
+    </div>
+
+    <!-- 워드 클라우드 -->
+    <div class="tab-pane" id="tab-wc">
+      <div class="wc-controls">
+        <div class="form-row">
+          <label class="lbl">최대 단어 수</label>
+          <input type="number" class="fc inline-num" id="wcMax" value="100" min="20" max="300" />
+        </div>
+        <div class="form-row">
+          <label class="lbl">색상 테마</label>
+          <select class="fc" id="wcColor" style="width:140px">
+            <option value="blue">블루 계열</option>
+            <option value="multi">다채로운</option>
+            <option value="green">그린 계열</option>
+            <option value="warm">웜 계열</option>
+          </select>
+        </div>
+        <button class="btn btn-outline btn-sm" style="align-self:flex-end" onclick="drawWC()">🔄 다시 그리기</button>
+        <button class="btn btn-outline btn-sm" style="align-self:flex-end" onclick="dlWC()">🖼 이미지 저장</button>
+      </div>
+      <div class="wc-canvas-wrap">
+        <canvas id="wc-canvas" height="500"></canvas>
+      </div>
+      <p style="font-size:.75rem;color:var(--text-muted);margin-top:8px;text-align:center;">
+        ※ 브라우저 기반 한국어 형태소 분석(조사·어미 제거 휴리스틱 적용). 정밀도는 불용어 추가로 보완하세요.
+      </p>
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<footer>텍스트 빈도 분석 도구 | GitHub Pages 정적 배포 버전</footer>
+
+<script>
+/* =============================================
+   상수 & 기본 설정
+   ============================================= */
+const COLORS = {
+  blue:  ['#1d4ed8','#2563eb','#3b82f6','#60a5fa','#1e40af','#1e3a8a','#93c5fd'],
+  multi: ['#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#8b5cf6','#ec4899'],
+  green: ['#14532d','#166534','#15803d','#16a34a','#22c55e','#4ade80'],
+  warm:  ['#7c2d12','#92400e','#78350f','#b45309','#d97706','#f59e0b','#fbbf24'],
+};
+
+/* 기본 불용어 (한국어 조사·부사·허사 중심) */
+const DEFAULT_SW = [
+  '이','가','은','는','을','를','의','에','와','과','도','만','로','으로',
+  '에서','에게','한테','에게서','한테서','보다','처럼','같이','만큼','까지','부터',
+  '이나','거나','든지','마다','라도','이라도','야','이야',
+  '것','수','때','중','내','후','전','등','들','적','번',
+  '이것','그것','저것','여기','거기','저기',
+  '그리고','하지만','그러나','또한','그래서','따라서','그런데','그러므로',
+  '그','이','저','나','너','우리','여러분','각','모든','여러',
+  '이런','그런','저런','이러한','이와','이를','이에','이로','이후','이전',
+  '이상','이하','이내','있다','없다','이다','하다','되다','않다',
+  '같다','많다','크다','작다','높다','낮다',
+  '위해','위한','대한','관한','통한','대해','통해','관해',
+  '위하여','대하여','통하여','하여','하고','하며','하면',
+  '되어','되고','되며','되면',
+  '매우','더','또','및','즉','특히','주로','함께','각각',
+  '본','다음','결국','먼저','마지막',
+];
+
+/* 조사/어미 제거용 접미어 (긴 것 먼저) */
+const SUFFIXES = [
+  '으로부터','에서부터','이라는','이라고','이라도','이라면','이라며',
+  '라는','라고','라도','라면','라며',
+  '에게서','한테서',
+  '에서도','에서는','에서만','에서',
+  '에게','한테',
+  '에도','에만','에는',
+  '처럼','보다','까지','부터','만큼','같이',
+  '으로서','로서','으로써','로써',
+  '들이','들은','들을','들에','들도','들만','들로','들과','들의',
+  '들',
+  '이며','이고','이나','이면','인데',
+  '이다','이야',
+  '하며','하고','하여','해서','하면',
+  '되며','되고','되어','돼서','되면',
+  '으로','에','의','와','과',
+  '은','는','이','가','을','를',
+  '도','만','로',
+];
+
+/* =============================================
+   상태 변수
+   ============================================= */
+let csvRows    = [];
+let columns    = [];
+let stopwords  = new Set(DEFAULT_SW);
+let selYears   = new Set(['ALL']);
+let allYears   = [];
+let freqData   = [];    // [{rank,word,freq,pct}]
+let dispData   = [];    // 현재 테이블에 표시할 데이터
+let sortCol    = 'freq';
+let sortAsc    = false;
+let page       = 1;
+const PAGE_SZ  = 20;
+
+/* =============================================
+   초기화
+   ============================================= */
+document.addEventListener('DOMContentLoaded', () => {
+  renderSW();
+  setupDrop();
+  document.getElementById('fileInput').addEventListener('change', e => {
+    if (e.target.files[0]) loadFile(e.target.files[0]);
+  });
+  document.getElementById('swInput').addEventListener('keypress', e => {
+    if (e.key === 'Enter') addStopwords();
+  });
+  document.getElementById('textCol').addEventListener('change', buildYearFilter);
+  document.getElementById('yearCol').addEventListener('change', buildYearFilter);
+});
+
+/* =============================================
+   드래그 & 드롭
+   ============================================= */
+function setupDrop() {
+  const zone = document.getElementById('dropZone');
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.classList.remove('over');
+    const f = e.dataTransfer.files[0];
+    if (f && f.name.toLowerCase().endsWith('.csv')) loadFile(f);
+    else alert('CSV 파일만 지원합니다.');
+  });
+}
+
+/* =============================================
+   파일 로드 & 파싱
+   ============================================= */
+function loadFile(file) {
+  Papa.parse(file, {
+    header: true, skipEmptyLines: true,
+    complete(res) {
+      if (!res.data.length) { alert('데이터가 없습니다.'); return; }
+      csvRows  = res.data;
+      columns  = res.meta.fields || [];
+      document.getElementById('fileName').textContent = file.name;
+      document.getElementById('fileRows').textContent = csvRows.length + '행';
+      document.getElementById('fileBadge').classList.add('show');
+      populateCols();
+      buildYearFilter();
+      document.getElementById('colMap').classList.remove('hidden');
+      document.getElementById('settingsCard').classList.remove('hidden');
+    },
+    error(err) { alert('CSV 파싱 오류: ' + err.message); }
+  });
+}
+
+function populateCols() {
+  const tSel = document.getElementById('textCol');
+  const ySel = document.getElementById('yearCol');
+  tSel.innerHTML = ySel.innerHTML = '';
+  columns.forEach(c => {
+    tSel.add(new Option(c, c));
+    ySel.add(new Option(c, c));
+  });
+  const textHits = ['sentence','abstract','text','텍스트','문장','내용'];
+  const yearHits = ['year','연도','년도','년'];
+  const tf = columns.find(c => textHits.some(h => c.toLowerCase() === h));
+  const yf = columns.find(c => yearHits.some(h => c.toLowerCase() === h));
+  if (tf) tSel.value = tf;
+  if (yf) ySel.value = yf;
+}
+
+/* =============================================
+   연도 필터
+   ============================================= */
+function buildYearFilter() {
+  const yCol = document.getElementById('yearCol').value;
+  allYears = [...new Set(csvRows.map(r => r[yCol]).filter(Boolean))].sort();
+  selYears = new Set(['ALL']);
+  const wrap = document.getElementById('yearWrap');
+  wrap.innerHTML = '';
+
+  const allBtn = mkYrBtn('전체', 'ALL', true);
+  wrap.appendChild(allBtn);
+  allYears.forEach(y => wrap.appendChild(mkYrBtn(y, y, false)));
+}
+
+function mkYrBtn(label, val, active) {
+  const b = document.createElement('button');
+  b.className = 'yr-btn' + (active ? ' on' : '');
+  b.textContent = label;
+  b.dataset.yr = val;
+  b.addEventListener('click', () => toggleYear(val, b));
+  return b;
+}
+
+function toggleYear(yr, btn) {
+  if (yr === 'ALL') {
+    selYears = new Set(['ALL']);
+    document.querySelectorAll('.yr-btn').forEach(b => b.classList.remove('on'));
+    btn.classList.add('on');
+    return;
+  }
+  const allBtn = document.querySelector('[data-yr="ALL"]');
+  if (selYears.has('ALL')) { selYears.delete('ALL'); allBtn && allBtn.classList.remove('on'); }
+  if (selYears.has(yr)) {
+    selYears.delete(yr); btn.classList.remove('on');
+    if (!selYears.size) { selYears.add('ALL'); allBtn && allBtn.classList.add('on'); }
+  } else {
+    selYears.add(yr); btn.classList.add('on');
+  }
+}
+
+/* =============================================
+   불용어 관리
+   ============================================= */
+function renderSW() {
+  const list = document.getElementById('swList');
+  list.innerHTML = '';
+  [...stopwords].sort().forEach(w => {
+    const div = document.createElement('div');
+    div.className = 'sw-tag';
+    const escaped = w.replace(/'/g, "\\'");
+    div.innerHTML = `${w}<button title="삭제" onclick="removeSW('${escaped}')">×</button>`;
+    list.appendChild(div);
+  });
+  document.getElementById('swCount').textContent = stopwords.size;
+}
+function addStopwords() {
+  const inp = document.getElementById('swInput');
+  inp.value.split(/[,\s]+/).map(s => s.trim()).filter(Boolean).forEach(w => stopwords.add(w));
+  inp.value = '';
+  renderSW();
+}
+function removeSW(w) { stopwords.delete(w); renderSW(); }
+function resetStopwords() { stopwords = new Set(DEFAULT_SW); renderSW(); }
+function clearStopwords() { if (confirm('모든 불용어를 삭제하시겠습니까?')) { stopwords.clear(); renderSW(); } }
+
+/* =============================================
+   한국어 토크나이저
+   ============================================= */
+function stripSuffix(word) {
+  for (const suf of SUFFIXES) {
+    if (word.length > suf.length + 1 && word.endsWith(suf)) {
+      const base = word.slice(0, word.length - suf.length);
+      if (base.length >= 2) return base;
+    }
+  }
+  return word;
+}
+
+function tokenize(text, minLen) {
+  const matches = text.match(/[가-힣]+/g) || [];
+  return matches.map(t => stripSuffix(t)).filter(w => w.length >= minLen);
+}
+
+/* =============================================
+   분석 실행
+   ============================================= */
+function runAnalysis() {
+  const btn = document.getElementById('analyzeBtn');
+  const spin = document.getElementById('spinner');
+  btn.disabled = true; spin.classList.add('show');
+  setTimeout(() => {
+    try { doAnalysis(); } finally { btn.disabled = false; spin.classList.remove('show'); }
+  }, 60);
+}
+
+function doAnalysis() {
+  const tCol   = document.getElementById('textCol').value;
+  const yCol   = document.getElementById('yearCol').value;
+  const minFreq= parseInt(document.getElementById('minFreq').value) || 2;
+  const minLen = parseInt(document.getElementById('minLen').value)  || 2;
+  const topN   = parseInt(document.getElementById('topN').value)    || 150;
+
+  const rows = selYears.has('ALL') ? csvRows : csvRows.filter(r => selYears.has(r[yCol]));
+
+  const map = {};
+  let totalWords = 0;
+  rows.forEach(r => {
+    tokenize(r[tCol] || '', minLen).forEach(w => {
+      if (!stopwords.has(w)) { map[w] = (map[w] || 0) + 1; totalWords++; }
+    });
+  });
+
+  const filtered = Object.entries(map)
+    .filter(([, f]) => f >= minFreq)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, topN);
+
+  const sumFreq = filtered.reduce((s, [, f]) => s + f, 0);
+  freqData = filtered.map(([word, freq], i) => ({
+    rank: i + 1, word, freq,
+    pct: sumFreq ? ((freq / sumFreq) * 100).toFixed(2) : '0.00',
+  }));
+
+  const usedYears = selYears.has('ALL') ? allYears : [...selYears];
+  document.getElementById('sDocs').textContent  = rows.length.toLocaleString();
+  document.getElementById('sTotal').textContent = totalWords.toLocaleString();
+  document.getElementById('sUniq').textContent  = Object.keys(map).length.toLocaleString();
+  document.getElementById('sYears').textContent = usedYears.length;
+
+  document.getElementById('resultsCard').classList.remove('hidden');
+  sortCol = 'freq'; sortAsc = false; page = 1;
+  dispData = [...freqData];
+  renderTable();
+  drawWC();
+  document.getElementById('resultsCard').scrollIntoView({ behavior: 'smooth' });
+}
+
+/* =============================================
+   빈도 테이블
+   ============================================= */
+function sortBy(col) {
+  sortAsc = (sortCol === col) ? !sortAsc : (col === 'word');
+  sortCol = col;
+  const keys = ['rank','word','freq','pct'];
+  keys.forEach(k => { document.getElementById('srt-' + k).textContent = ' ⇅'; });
+  document.getElementById('srt-' + col).textContent = sortAsc ? ' ↑' : ' ↓';
+  dispData.sort((a, b) => {
+    let va = a[col], vb = b[col];
+    if (col !== 'word') { va = parseFloat(va); vb = parseFloat(vb); }
+    return sortAsc ? (va < vb ? -1 : va > vb ? 1 : 0) : (va > vb ? -1 : va < vb ? 1 : 0);
+  });
+  page = 1; renderTable();
+}
+
+function filterTable() {
+  const q = document.getElementById('tableSearch').value.trim();
+  dispData = q ? freqData.filter(d => d.word.includes(q)) : [...freqData];
+  page = 1; renderTable();
+}
+
+function renderTable() {
+  const maxFreq = dispData.length ? dispData[0].freq : 1;
+  const start   = (page - 1) * PAGE_SZ;
+  const slice   = dispData.slice(start, start + PAGE_SZ);
+  document.getElementById('wordCount').textContent = dispData.length;
+
+  const tb = document.getElementById('freqTbody');
+  tb.innerHTML = '';
+  slice.forEach(d => {
+    const pct = maxFreq ? (d.freq / maxFreq * 100).toFixed(1) : 0;
+    const tr  = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="rank">${d.rank}</td>
+      <td><strong>${d.word}</strong></td>
+      <td>${d.freq.toLocaleString()}</td>
+      <td>${d.pct}%</td>
+      <td><div class="bar-wrap"><div class="bar-fill" style="width:${pct}%"></div></div></td>`;
+    tb.appendChild(tr);
+  });
+  renderPager();
+}
+
+function renderPager() {
+  const total = Math.ceil(dispData.length / PAGE_SZ);
+  const pg    = document.getElementById('pager');
+  pg.innerHTML = '';
+  if (total <= 1) return;
+
+  const mk = (txt, p, disabled = false, active = false) => {
+    const b = document.createElement('button');
+    b.className = 'pg-btn' + (active ? ' on' : '');
+    b.textContent = txt; b.disabled = disabled;
+    b.onclick = () => { page = p; renderTable(); };
+    return b;
+  };
+
+  pg.appendChild(mk('‹', page - 1, page === 1));
+  const range = 5;
+  let s = Math.max(1, page - 2), e = Math.min(total, s + range - 1);
+  if (e - s < range - 1) s = Math.max(1, e - range + 1);
+  if (s > 1) { pg.appendChild(mk('1', 1)); if (s > 2) pg.appendChild(dots()); }
+  for (let i = s; i <= e; i++) pg.appendChild(mk(i, i, false, i === page));
+  if (e < total) { if (e < total - 1) pg.appendChild(dots()); pg.appendChild(mk(total, total)); }
+  pg.appendChild(mk('›', page + 1, page === total));
+}
+function dots() {
+  const sp = document.createElement('span');
+  sp.textContent = '…'; sp.style.cssText = 'padding:6px 4px;color:var(--text-muted)';
+  return sp;
+}
+
+/* =============================================
+   워드 클라우드
+   ============================================= */
+function drawWC() {
+  const canvas = document.getElementById('wc-canvas');
+  const wrap   = canvas.parentElement;
+  const max    = parseInt(document.getElementById('wcMax').value) || 100;
+  const scheme = document.getElementById('wcColor').value;
+  const palette= COLORS[scheme] || COLORS.blue;
+
+  canvas.width  = wrap.clientWidth || 800;
+  canvas.height = 500;
+
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (!freqData.length) return;
+
+  const maxF = freqData[0].freq;
+  const list = freqData.slice(0, max).map(d => {
+    const size = Math.max(12, Math.round(10 + (d.freq / maxF) * 70));
+    return [d.word, size];
+  });
+
+  WordCloud(canvas, {
+    list,
+    gridSize:    Math.round(14 * canvas.width / 900),
+    weightFactor: 1,
+    fontFamily:  '"Nanum Gothic", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif',
+    color:       () => palette[Math.floor(Math.random() * palette.length)],
+    rotateRatio:  0.3,
+    backgroundColor: '#ffffff',
+    minSize:      8,
+    drawOutOfBound: false,
+  });
+}
+
+function dlWC() {
+  const canvas = document.getElementById('wc-canvas');
+  const a = document.createElement('a');
+  a.download = '워드클라우드.png';
+  a.href = canvas.toDataURL('image/png');
+  a.click();
+}
+
+/* =============================================
+   CSV 다운로드
+   ============================================= */
+function dlCSV() {
+  if (!freqData.length) return;
+  const header = ['순위','단어','빈도','비율(%)'];
+  const rows   = freqData.map(d => [d.rank, d.word, d.freq, d.pct]);
+  const csv    = '\uFEFF' + [header, ...rows]
+    .map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(','))
+    .join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = '빈도분석_결과.csv';
+  a.click(); URL.revokeObjectURL(url);
+}
+
+/* =============================================
+   탭 전환
+   ============================================= */
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('on'));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('on'));
+  btn.classList.add('on');
+  document.getElementById('tab-' + name).classList.add('on');
+  if (name === 'wc' && freqData.length) drawWC();
+}
+</script>
+</body>
+</html>
