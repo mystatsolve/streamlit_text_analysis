@@ -63,8 +63,10 @@ def get_korean_font():
         "C:/Windows/Fonts/malgun.ttf",          # 맑은 고딕 (Windows)
         "C:/Windows/Fonts/NanumGothic.ttf",
         "C:/Windows/Fonts/gulim.ttc",
-        "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",  # Linux
-        "/System/Library/Fonts/AppleSDGothicNeo.ttc",        # macOS
+        "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",       # Linux (fonts-nanum)
+        "/usr/share/fonts/truetype/nanum/NanumBarunGothic.ttf",  # Linux 대체
+        "/usr/share/fonts/truetype/nanum/NanumMyeongjo.ttf",     # Linux 대체2
+        "/System/Library/Fonts/AppleSDGothicNeo.ttc",            # macOS
     ]
     for p in candidates:
         if Path(p).exists():
