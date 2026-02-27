@@ -36,6 +36,9 @@ def get_korean_font():
         r"C:\Windows\Fonts\malgunbd.ttf",
         r"C:\Windows\Fonts\gulim.ttc",
         r"C:\Windows\Fonts\batang.ttc",
+        "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",       # Linux (fonts-nanum)
+        "/usr/share/fonts/truetype/nanum/NanumBarunGothic.ttf",  # Linux 대체
+        "/usr/share/fonts/truetype/nanum/NanumMyeongjo.ttf",     # Linux 대체2
     ]
     for p in candidates:
         if os.path.exists(p):
