@@ -470,7 +470,15 @@ with tab_bert:
     bert_min_samples = c2.slider("최소 샘플 수",         3,  50,  15)
     bert_min_topic   = c3.slider("최소 토픽 크기",       10, 300, 100, step=10)
 
-    st.caption("⚠️ 임베딩 모델(paraphrase-multilingual-MiniLM-L12-v2)이 최초 실행 시 자동 다운로드됩니다. 약 5~10분 소요될 수 있습니다.")
+    emb_mode = st.radio(
+        "임베딩 방식",
+        ["TF-IDF (경량, 권장)", "Neural (sentence-transformers)"],
+        index=0,
+        horizontal=True,
+    )
+    use_neural = emb_mode.startswith("Neural")
+    if use_neural:
+        st.caption("⚠️ 임베딩 모델(paraphrase-multilingual-MiniLM-L12-v2)이 최초 실행 시 자동 다운로드됩니다. 약 5~10분 소요될 수 있습니다.")
     run_bert = st.button("▶ BERTopic 분석 실행", type="primary", use_container_width=True)
 
     if run_bert:
@@ -479,9 +487,10 @@ with tab_bert:
         with st.spinner("BERTopic 패키지 로드 중..."):
             try:
                 from bertopic import BERTopic
-                from sentence_transformers import SentenceTransformer
                 from sklearn.feature_extraction.text import CountVectorizer as CV
                 from hdbscan import HDBSCAN
+                if use_neural:
+                    from sentence_transformers import SentenceTransformer
             except Exception as e:
                 st.error(f"BERTopic 임포트 실패:\n```\n{e}\n```")
                 st.stop()
@@ -509,12 +518,23 @@ with tab_bert:
         docs  = df_bert["nouns"].tolist()
         years = df_bert["year"].astype(int).tolist()
 
-        prog.progress(30, "임베딩 모델 로드 중...")
-        try:
-            emb_model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
-        except Exception as e:
-            st.error(f"임베딩 모델 로드 실패: {e}")
-            st.stop()
+        prog.progress(30, "임베딩 생성 중...")
+        embeddings = None
+        emb_model_param = None
+
+        if use_neural:
+            try:
+                emb_model_param = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+            except Exception as e:
+                st.error(f"임베딩 모델 로드 실패: {e}")
+                st.stop()
+        else:
+            from sklearn.feature_extraction.text import TfidfVectorizer
+            from sklearn.decomposition import TruncatedSVD
+            tfidf = TfidfVectorizer(max_features=3000, min_df=2)
+            tfidf_matrix = tfidf.fit_transform(docs)
+            svd = TruncatedSVD(n_components=min(50, tfidf_matrix.shape[1] - 1))
+            embeddings = svd.fit_transform(tfidf_matrix)
 
         prog.progress(40, "BERTopic 모델 학습 중 (시간이 걸립니다)...")
         try:
@@ -524,18 +544,18 @@ with tab_bert:
                 min_samples=bert_min_samples,
                 metric="euclidean",
                 cluster_selection_method="eom",
-                prediction_data=True,
+                prediction_data=False,
             )
             topic_model = BERTopic(
-                embedding_model=emb_model,
+                embedding_model=emb_model_param,
                 vectorizer_model=vec_model,
                 hdbscan_model=hdbscan_model,
                 language="multilingual",
-                calculate_probabilities=True,
+                calculate_probabilities=False,
                 verbose=False,
                 min_topic_size=bert_min_topic,
             )
-            topics, probs = topic_model.fit_transform(docs)
+            topics, probs = topic_model.fit_transform(docs, embeddings=embeddings)
         except Exception as e:
             st.error(f"BERTopic 학습 실패:\n```\n{e}\n```")
             st.stop()
@@ -559,11 +579,14 @@ with tab_bert:
 
         # 문서별 토픽
         df_bert["topic"] = topics
-        doc_prob = []
-        for p in probs:
-            arr = np.asarray(p)
-            doc_prob.append(float(arr.max()) if arr.size > 0 else 0.0)
-        df_bert["topic_prob"] = doc_prob
+        if probs is not None:
+            doc_prob = []
+            for p in probs:
+                arr = np.asarray(p)
+                doc_prob.append(float(arr.max()) if arr.size > 0 else 0.0)
+            df_bert["topic_prob"] = doc_prob
+        else:
+            df_bert["topic_prob"] = 0.0
         doc_topics_out = df_bert[["abstract", "year", "topic", "topic_prob"]].copy()
 
         # 연도별 토픽 트렌드 (topics_over_time)
